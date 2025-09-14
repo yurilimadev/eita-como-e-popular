@@ -7,6 +7,7 @@ from data.extracao import df_merge
 import folium
 from streamlit_folium import st_folium
 import base64
+from assets.style import carregar_html_popup
 
 #INICIANDO O APP
 def main():
@@ -16,14 +17,15 @@ def main():
         st.session_state.mostra_resultados = False
 
     #SESSÃO HEADER COM LOGO
-    st.image('/home/dimit/projeto-flask/assets/photo_2025-09-09_15-50-45.jpg',)
+    
+    st.image('assets/logo-eita-como-e-popular.jpg',)
     st.subheader('Saiba quantas cidades tem no seu instagram!')
     st.text('Obs: Pode comparar com qualquer rede social! Qualquer uma que tem seguidores!')
     st.warning('Dados de população são relativos as estimativas populacionais do IBGE')
 
     #SESSÃO SIDEBAR
     st.sidebar.text('👨‍💻 ☕ Me pague um café!')
-    st.sidebar.image('/home/dimit/projeto-flask/assets/qrcode-pix-buy-a-coffe.png')
+    st.sidebar.image('assets/qrcode-pix-buy-a-coffe.png')
     
     
     #SESSÃO DE INTERAÇÃO COM USUÁRIO
@@ -68,7 +70,7 @@ def main():
                     df_top10 = df_filtrado.iloc[0:11,:]
                     st.dataframe(df_top10[['cidade', 'estado','2025']].set_index('cidade'))
                 with col2:
-                    st.image('/home/dimit/projeto-flask/assets/TOMA ESSA!.png',width='stretch')
+                    st.image('assets/TOMA ESSA!.png',width='stretch')
                 
                 st.subheader('Veja onde fica no mapa! ')
                 #st.write(df_filtrado.head(10))
@@ -90,6 +92,7 @@ def main():
                 cidade = st.session_state.top10_cidades
                 
                 filtro_lat_lng = df_top10[df_top10['cidade'] == cidade]
+                
                 if not filtro_lat_lng.empty:
                     latitude_atual = filtro_lat_lng['latitude'].iloc[0]
                     longitude_atual = filtro_lat_lng['longitude'].iloc[0]
@@ -100,19 +103,19 @@ def main():
                         zoom_start=10,
                     )
 
-                    caminho_imagem = "/home/dimit/projeto-flask/assets/photo_2025-09-10_23-31-32-removebg-preview.png"
+                    caminho_imagem = "assets/aviso-mapa.png"
                     with open(caminho_imagem, "rb") as image_file:
                         encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
-                    #print(encoded_string)
-                    html = f"""
-                    <h3>Ajude a melhorar a localização nas cidades!</h3>
-                    <a href=#>Link do repositório</a>
-                    <img src="data:image/png;base64,{encoded_string}" width="100%" alt="" srcset="">
-                    """
-                    iframe = branca.element.IFrame(html=html, width=200, height=400)
+                    
+                    html = carregar_html_popup(
+                        encoded_string=encoded_string,
+                        repo_url="https://github.com/yurilimadev/eita-como-e-popular"
+                    )
+                    
+                    iframe = branca.element.IFrame(html=html, width=380, height=380)
                     angle = 90
                     icon = folium.Icon(angle=angle)
-                    popup = folium.Popup(iframe, max_width=500)
+                    popup = folium.Popup(iframe, max_width=410)
                     folium.Marker(
                         location=[latitude_atual, longitude_atual],
                         popup=popup,
@@ -126,7 +129,7 @@ def main():
                 
                 col1_rodape, col2_rodape, col3_rodape = st.columns([1, 2, 1])
                 with col2_rodape:
-                    st.image('/home/dimit/projeto-flask/assets/meme_pernalonga.jpg', )
+                    st.image('assets/meme_pernalonga.jpg')
     
         
 

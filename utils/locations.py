@@ -32,7 +32,7 @@ def get_geocode(chave: str, local: str):
 
 dict_local = {
     'latitude':[],
-    'logitude':[]
+    'longitude':[]
 }
 
 for index, row in df_merge.iterrows():
@@ -40,11 +40,11 @@ for index, row in df_merge.iterrows():
     resposta = get_geocode(chave=c_map, local=localizacao)
     if resposta:
         dict_local['latitude'].append(resposta['lat'])
-        dict_local['logitude'].append(resposta['lng'])
+        dict_local['longitude'].append(resposta['lng'])
         print(f'Geocoding de {localizacao}: Extraído e add no dict: {resposta}')
     else:
         dict_local['latitude'].append(None)
-        dict_local['logitude'].append(None)
+        dict_local['longitude'].append(None)
     
 #Cache agressivo    
 df_local = pd.DataFrame(dict_local)
