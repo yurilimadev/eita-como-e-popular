@@ -1,13 +1,16 @@
 #BIBLIOTECAS IMPORTADAS
 import time
+import os
+from dotenv import load_dotenv
 import branca
 import streamlit as st
-import plotly.express as px
-from data.extracao import df_merge
+import streamlit.components.v1 as components
 import folium
 from streamlit_folium import st_folium
+import plotly.express as px
+from data.extracao import df_merge
 import base64
-from assets.style import carregar_html_popup
+from assets.style import carregar_html_popup, create_copy_button_html
 
 #INICIANDO VARIAVEIS NECESSARIAS PARA A SESSAO
 ##CRIANDO VARIAVEL PARA CONTROLE DE SESSÂO
@@ -15,7 +18,8 @@ if 'mostra_resultados' not in st.session_state:
     st.session_state.mostra_resultados = False
 if 'numero_seguidores' not in st.session_state:
     st.session_state.numero_seguidores = 0
-
+load_dotenv()
+PIX_KEY = os.environ.get("PIX_KEY", "")
 #INICIANDO O APP
 def main():
 
@@ -27,8 +31,19 @@ def main():
     st.warning('Dados de população são relativos as estimativas populacionais do IBGE')
 
     #SESSÃO SIDEBAR
-    st.sidebar.text('👨‍💻 ☕ Me pague um café!')
-    st.sidebar.image('assets/qrcode-pix-buy-a-coffe.png')
+    with st.sidebar:
+        st.text('👨‍💻 ☕ Me pague um café!')
+        st.image('assets/qrcode-pix-buy-a-coffe.png')
+
+        if PIX_KEY:
+            # CHAME A FUNÇÃO UMA ÚNICA VEZ AQUI
+            texto_para_copiar = PIX_KEY
+            components.html(create_copy_button_html(texto_para_copiar), height=100)
+        else:
+            st.error("Chave PIX não configurada")
+            st.info("Configure a variável de ambiente PIX_KEY no Railway")
+        
+        
     
     #print(st.session_state, "ANTES DO FORMULARIO")
     #SESSÃO DE INTERAÇÃO COM USUÁRIO
@@ -131,8 +146,8 @@ def main():
             col1_rodape, col2_rodape, col3_rodape = st.columns([1, 2, 1])
             with col2_rodape:
                 st.image('assets/meme_pernalonga.jpg')
-    
-        
+
+ 
 
 # INICIA O APP
 if __name__ == '__main__':
