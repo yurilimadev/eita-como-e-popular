@@ -1,1 +1,1 @@
-web: gunicorn server:app
+web: python -m streamlit run seu_app.py --server.port=$PORT --server.enableCORS=false
