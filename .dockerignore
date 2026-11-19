@@ -1,0 +1,10 @@
+.git
+.gitignore
+.env
+.agents
+venv
+__pycache__
+*.pyc
+docs
+tests
+skills-lock.json

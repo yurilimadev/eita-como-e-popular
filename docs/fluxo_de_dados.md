@@ -1,0 +1,128 @@
+# Fluxo de Dados — Eita Como É Popular
+
+Este documento descreve como os dados viajam pelo projeto, desde a coleta nas APIs externas (IBGE e Google Maps) até a renderização na interface do Streamlit.
+
+> **Dica de manutenção:** Caso o fluxo de dados mude no código, edite o diagrama abaixo ou o arquivo puro do Mermaid em [`docs/fluxo_de_dados.mmd`](fluxo_de_dados.mmd).
+
+## Diagrama (Mermaid)
+
+```mermaid
+flowchart TD
+    subgraph Fontes_Externas["1. Fontes Externas e Configuracao"]
+        IBGE["API IBGE SIDRA<br/>(Agregado 6579 - Populacao 2025)"]
+        GMAPS["Google Maps Geocoding API"]
+        ENV["Arquivo .env<br/>(API_KEY, PIX_KEY)"]
+    end
+
+    subgraph Pipeline_Offline["2. Enriquecimento Geografico Offline (utils/locations.py)"]
+        LOC_SCRIPT["get_geocode(chave, local)<br/>Itera sobre cidade + estado"]
+        CSV_LOCAL[("data/df_local.csv<br/>(latitude, longitude)")]
+    end
+
+    subgraph Camada_Dados["3. Extracao e Transformacao (data/extracao.py)"]
+        REQ_IBGE["requests.get(URL)<br/>Extrai JSON series"]
+        NORM_JSON["pd.json_normalize()<br/>Separa localidade e serie 2025"]
+        REGEX_SPLIT["Regex: extrai cidade e estado<br/>Converte populacao 2025 para int"]
+        DF_MERGE[("DataFrame: df_merge<br/>(id, 2025, cidade, estado, latitude, longitude)")]
+    end
+
+    subgraph App_Streamlit["4. Controle de Sessao e Filtros (app.py)"]
+        USER_INPUT["Input do Usuario (form1)<br/>numero_seguidores + Botoes"]
+        SESSION_STATE["st.session_state<br/>(mostra_resultados, numero_seguidores, top10_cidades)"]
+        CHECK_MIN{"numero_seguidores >=<br/>menor populacao de 2025?"}
+        DF_FILTRADO["df_filtrado<br/>Filtra <= numero_seguidores e ordena DESC"]
+        DF_TOP10["df_top10<br/>Fatia top 11 municipios (iloc 0:11)"]
+        SELECT_CIDADE["st.selectbox Cidades<br/>Seleciona cidade do df_top10"]
+        FILTRO_COORDS["filtro_lat_lng<br/>Extrai latitude_atual e longitude_atual"]
+    end
+
+    subgraph Camada_Visual["5. Renderizacao e Componentes (assets e components)"]
+        SIDEBAR_PIX["create_copy_button_html()<br/>(assets/style.py)<br/>Botao copiar PIX na Sidebar"]
+        MEME_FALLBACK["Exibe Meme Pernalonga<br/>(assets/meme_pernalonga.jpg)"]
+        TABELA_UI["st.dataframe(df_top10)<br/>Exibe Cidade, Estado e Populacao 2025"]
+        POPUP_HTML["carregar_html_popup()<br/>Injeta Base64 (aviso-mapa.png) + repo_url<br/>em components/mapa_popup.html"]
+        MAPA_FOLIUM["folium.Map + folium.Marker<br/>Renderizado via st_folium()"]
+    end
+
+    IBGE -->|"JSON HTTP GET"| REQ_IBGE
+    REQ_IBGE -->|"io.StringIO"| NORM_JSON
+    NORM_JSON --> REGEX_SPLIT
+    REGEX_SPLIT -->|"pd.concat(axis=1)"| DF_MERGE
+    CSV_LOCAL -->|"pd.read_csv()"| DF_MERGE
+
+    ENV -->|"API_KEY"| LOC_SCRIPT
+    REGEX_SPLIT -.->|"cidade, estado"| LOC_SCRIPT
+    LOC_SCRIPT -->|"Consulta Lat/Lng"| GMAPS
+    LOC_SCRIPT -->|"to_csv(index=False)"| CSV_LOCAL
+
+    ENV -->|"PIX_KEY"| SIDEBAR_PIX
+
+    USER_INPUT -->|"Submit / Restaurar"| SESSION_STATE
+    SESSION_STATE --> CHECK_MIN
+    DF_MERGE --> CHECK_MIN
+
+    CHECK_MIN -->|"Nao (Menor que a menor cidade)"| MEME_FALLBACK
+    CHECK_MIN -->|"Sim"| DF_FILTRADO
+
+    DF_FILTRADO --> DF_TOP10
+    DF_TOP10 --> TABELA_UI
+    DF_TOP10 -->|"Opcoes de cidades"| SELECT_CIDADE
+
+    SELECT_CIDADE -->|"Sincroniza key"| SESSION_STATE
+    SELECT_CIDADE -->|"Cidade escolhida"| FILTRO_COORDS
+    DF_TOP10 --> FILTRO_COORDS
+
+    FILTRO_COORDS -->|"latitude_atual, longitude_atual"| MAPA_FOLIUM
+    POPUP_HTML -->|"branca.element.IFrame"| MAPA_FOLIUM
+
+    classDef external fill:#1e293b,stroke:#94a3b8,stroke-width:2px,color:#f8fafc
+    classDef storage fill:#0f766e,stroke:#2dd4bf,stroke-width:2px,color:#f0fdfa
+    classDef process fill:#1d4ed8,stroke:#60a5fa,stroke-width:2px,color:#eff6ff
+    classDef state fill:#7c3aed,stroke:#c084fc,stroke-width:2px,color:#f5f3ff
+    classDef ui fill:#b45309,stroke:#fbbf24,stroke-width:2px,color:#fffbeb
+
+    class IBGE,GMAPS external
+    class ENV,CSV_LOCAL,DF_MERGE storage
+    class LOC_SCRIPT,REQ_IBGE,NORM_JSON,REGEX_SPLIT,CHECK_MIN,DF_FILTRADO,DF_TOP10,FILTRO_COORDS,POPUP_HTML process
+    class SESSION_STATE state
+    class USER_INPUT,SELECT_CIDADE,SIDEBAR_PIX,MEME_FALLBACK,TABELA_UI,MAPA_FOLIUM ui
+```
+
+---
+
+## Etapas do Fluxo de Dados
+
+### 1. Enriquecimento Geográfico Offline (`utils/locations.py`)
+- **Entrada:** Lista de municípios (`cidade`, `estado`) extraída do IBGE e a chave `API_KEY` do Google Maps vinda do arquivo `.env`.
+- **Processamento:** A função `get_geocode()` consulta a API do Google Maps Geocoding para cada município brasileiro.
+- **Saída:** Gera um cache persistente em disco no arquivo `data/df_local.csv` contendo as colunas `latitude` e `longitude`.
+
+### 2. Extração e Transformação — ETL (`data/extracao.py`)
+- **Entrada:**
+  - Requisição HTTP GET para a API SIDRA do IBGE (Agregado `6579`, Período `2025`, Variável `9324` — Estimativa de População).
+  - Leitura local do CSV `data/df_local.csv`.
+- **Processamento:**
+  - Deserializa o JSON de séries e normaliza os objetos `localidade` e `serie` com `pandas.json_normalize()`.
+  - Aplica a expressão regular `r'(.*)\s-\s([A-Z][A-Z])'` na coluna `nome` para separar `cidade` e `estado`, convertendo a estimativa populacional (`2025`) para inteiro (`int`).
+  - Concatena horizontalmente (`pd.concat(..., axis=1)`) os dados do IBGE com as coordenadas de `df_local.csv`.
+- **Saída:** O DataFrame consolidado `df_merge` com as colunas `id`, `2025`, `cidade`, `estado`, `latitude` e `longitude`.
+
+### 3. Interação do Usuário e Estado de Sessão (`app.py`)
+- **Entrada:**
+  - Variável de ambiente `PIX_KEY` (para o botão de copiar chave PIX na barra lateral).
+  - Formulário `form1` onde o usuário insere `numero_seguidores` e aciona **Comparar** ou **Restaurar**.
+- **Controle de Estado (`st.session_state`):**
+  - `mostra_resultados`: controla se a seção de resultados deve permanecer visível entre reruns do Streamlit (como ao trocar a cidade no `selectbox`).
+  - `numero_seguidores`: armazena a quantidade informada pelo usuário.
+  - `top10_cidades`: mantém a cidade atualmente selecionada para exibição no mapa.
+
+### 4. Filtragem e Renderização (`app.py`, `assets/style.py`, `components/mapa_popup.html`)
+- **Regra de Decisão:** Verifica se `numero_seguidores >= df_merge['2025'].min()`.
+  - **Caso Falso:** Renderiza `assets/meme_pernalonga.jpg`.
+  - **Caso Verdadeiro:**
+    1. Filtra `df_merge` mantendo apenas cidades com população `<= numero_seguidores` e ordena em ordem decrescente (`df_filtrado`).
+    2. Seleciona os primeiros registros em `df_top10` (`iloc[0:11, :]`) e exibe a tabela via `st.dataframe`.
+    3. Popula o `st.selectbox` com os nomes das cidades de `df_top10`.
+    4. Ao selecionar uma cidade, recupera `latitude_atual` e `longitude_atual` em `filtro_lat_lng`.
+    5. Codifica `assets/aviso-mapa.png` em Base64 e injeta no template `components/mapa_popup.html` através de `carregar_html_popup()`.
+    6. Cria o mapa interativo `folium.Map` com marcador e popup em `IFrame` e renderiza na página com `st_folium()`.

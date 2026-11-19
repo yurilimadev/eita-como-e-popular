@@ -13,6 +13,26 @@ def carregar_html_popup(encoded_string, repo_url):
     
     return html_final
 
+def carregar_html_header():
+    with open('components/header_card.html', 'r', encoding='utf-8') as file:
+        return file.read()
+
+def carregar_css_pagina():
+    with open('components/page_style.html', 'r', encoding='utf-8') as file:
+        return file.read()
+
+def carregar_html_resumo(total_cidades, percentual, maior_cidade, maior_estado, maior_populacao):
+    with open('components/resumo_card.html', 'r', encoding='utf-8') as file:
+        html_template = file.read()
+    return (
+        html_template
+        .replace('{total_cidades}', f"{total_cidades:,}".replace(',', '.'))
+        .replace('{percentual}', f"{percentual:.1f}".replace('.', ','))
+        .replace('{maior_cidade}', str(maior_cidade))
+        .replace('{maior_estado}', str(maior_estado))
+        .replace('{maior_populacao}', f"{int(maior_populacao):,}".replace(',', '.'))
+    )
+
 def create_copy_button_html(text_to_copy):
     """
     Cria e retorna o código HTML, CSS e JavaScript para um botão de copiar.
